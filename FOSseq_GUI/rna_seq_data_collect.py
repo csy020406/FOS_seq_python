@@ -14,11 +14,15 @@ feature_data_file = 'WMB-10Xv3-TH/log2' # WMB-10Xv2-TH/log2 for default
 gene_start = 0
 gene_end = 1
 
+cell_number = 0
+
 def change_address(s):
     global address
     address = s
 
-def change_feature_matrix_label(o1, o2, o3=0):
+
+# by Option 1, 2, 3
+def _change_feature_matrix_label(o1, o2, o3=0):
     global feature_directory
     global feature_matrix_label
     global feature_data_file
@@ -30,13 +34,15 @@ def change_feature_matrix_label(o1, o2, o3=0):
     else:
         feature_data_file = feature_matrix_label + '/raw'
 
+
 # by Option 4
-def change_gene_range(s, e):
+def _change_gene_range(s, e):
     global gene_start
     global gene_end
 
     gene_start = s
     gene_end = e
+
 
 def list_file_name(option1):
     files = {
@@ -53,14 +59,23 @@ def list_file_name(option1):
         result.extend(files.get(opt, []))
     return result
 
-# Main job
-def data_collect():
+
+def _update_cell_number(n, is_multi=0):
+    global cell_number
+    if is_multi:
+        cell_number += n
+    else:
+        cell_number = n
+
+
+def get_cell_number():
+    return cell_number
+
+
+# ======== Main job =========
+def _do_data_collect():
     download_base = Path(address)
     abc_cache = AbcProjectCache.from_s3_cache(download_base)
-    print(address)  # debug check
-
-    # Should be controlled by Option 1, 2, 3
-    file = abc_cache.get_data_path(directory = feature_directory, file_name = feature_data_file)
 
     # Metadata
     cell = abc_cache.get_metadata_dataframe(
@@ -77,9 +92,16 @@ def data_collect():
     )
     cluster_details.set_index('cluster_alias', inplace = True)
 
-    cell_extended = cell.join(cluster_details, on = 'cluster_alias')    # all cells
+    cell_extended = cell.join(cluster_details, on = 'cluster_alias')    # all cell metadata
+    pred = (cell_extended['feature_matrix_label'] == feature_matrix_label)
+    cell_filtered = cell_extended[pred] # filtered cell metadata
 
+    # Should be controlled by Option 1, 2, 3
+    file = abc_cache.get_data_path(directory = feature_directory, file_name = feature_data_file)
     adata = anndata.read_h5ad(file, backed = 'r')
+
+    _update_cell_number(0)
+    _update_cell_number(len(adata.obs))
 
     def _create_expression_dataframe(ad, gf, cf):
         gdata = ad[:, gf.index].to_df()
@@ -106,45 +128,118 @@ def data_collect():
         asubset = adata[:, gene_filtered.index].to_memory()
 
         # Gene expression data per cell
-        pred = (cell_extended['feature_matrix_label'] == feature_matrix_label)
-        cell_filtered = cell_extended[pred]
-
         ntexp = _create_expression_dataframe(asubset, gene_filtered, cell_filtered)
         agg = _aggregate_by_metadata(ntexp, gene_filtered.gene_symbol, values=['cluster_alias'])    # (clusters*gene) mean, std, count matrix
-        print("agg.head(10)")
-        print(agg.head(10))
 
         if final_agg is None:
             final_agg = agg
         else:
             final_agg = final_agg.merge(agg, on='cluster_alias', how='outer')
     
-    print("final result")
-    print(final_agg.head(10))
+    return final_agg
 
-def data_collect_multi():
-    # NEED development
-    # do data_collect for multiple files
-    print("not yet")
 
+# ======== Main job (multi.ver) =========
+def _do_data_collect_multi(o1, o2, o3):
+    download_base = Path(address)
+    abc_cache = AbcProjectCache.from_s3_cache(download_base)
+
+    # Metadata
+    cell = abc_cache.get_metadata_dataframe(
+        directory = 'WMB-10X',
+        file_name = 'cell_metadata',
+        dtype = {'cell_label': str}
+    )
+    cell.set_index('cell_label', inplace = True)
+
+    cluster_details = abc_cache.get_metadata_dataframe(
+        directory = 'WMB-taxonomy',
+        file_name = 'cluster_to_cluster_annotation_membership_pivoted',
+        keep_default_na = False
+    )
+    cluster_details.set_index('cluster_alias', inplace = True)
+
+    cell_extended = cell.join(cluster_details, on = 'cluster_alias')    # all cell metadata
+    pred = pd.Series([False] * len(cell_extended), index=cell_extended.index)
+
+    # Should be controlled by Option 1, 2, 3
+    adata_list = []
+    _update_cell_number(0)
+    for dir in o1:
+        for f in o2:
+            if f.startswith(dir):
+                _change_feature_matrix_label(dir, f, o3)
+                file = abc_cache.get_data_path(directory = feature_directory, file_name = feature_data_file)
+                adata = anndata.read_h5ad(file, backed = 'r')
+                adata_list.append(adata)
+
+                pred |= (cell_extended['feature_matrix_label'] == feature_matrix_label)
+                _update_cell_number(len(adata.obs), 1)
+
+    cell_filtered = cell_extended[pred] # filtered cell metadata
+
+    def _create_expression_dataframe(ad, gf, cf):
+        gdata = ad[:, gf.index].to_df()
+        gdata.columns = gf.gene_symbol
+        joined = cf.join(gdata)
+        return joined
+    
+    def _aggregate_by_metadata(df, gene_filtered, values, sort = False):
+        grouped = df.groupby(values)[gene_filtered].agg(['mean', 'std', 'count']) # don't count NaN
+        if sort:
+            grouped = grouped.sort_values(by = gene_filtered[0], ascending = False)
+        return grouped
+    
+    global gene_end
+    gene_end = min(gene_end, adata_list[0].shape[1])    # Compare with the number of total genes
+    chunk_size = 100    # Change to improve performance
+
+    # from gene_start to gene_end
+    final_agg = None
+    for i in range(gene_start, gene_end, chunk_size):
+        j = min(i + chunk_size, gene_end)
+        # Generate gene_filtered
+        gene_filtered = adata_list[0].var.iloc[i:j, :]     # gene range change
+
+        asubset_list = []
+        for a in adata_list:
+            asubset = a[:, gene_filtered.index].to_memory()
+            asubset_list.append(asubset)
+
+        combined = anndata.concat(asubset_list, axis=0, join='outer')
+
+        # Gene expression data per cell
+        ntexp = _create_expression_dataframe(combined, gene_filtered, cell_filtered)
+        agg = _aggregate_by_metadata(ntexp, gene_filtered.gene_symbol, values=['cluster_alias'])    # (clusters*gene) mean, std, count matrix
+
+        if final_agg is None:
+            final_agg = agg
+        else:
+            final_agg = final_agg.merge(agg, on='cluster_alias', how='outer')
+    return final_agg
+
+
+# Excute _do_data_collect or _do_data_collect_multi
+def data_collect(o1, o2, o3, o4s, o4e):
+    _change_gene_range(o4s, o4e)
+
+    if len(o2) == 1:
+        _change_feature_matrix_label(o1[0], o2[0], o3)
+        agg = _do_data_collect()
+    else:
+        agg = _do_data_collect_multi(o1, o2, o3)
+    return agg
 
 if __name__ == '__main__':
     # main job
     print('main')
     change_address('C:/programming_data/abc_download_root')
 
-    option1 = ['WMB-10Xv2']
-    option2 = ['WMB-10Xv2-TH']
+    option1 = ['WMB-10Xv2', 'WMB-10Xv3']
+    option2 = ['WMB-10Xv2-TH', 'WMB-10Xv2-CTXsp', 'WMB-10Xv3-TH']
     option3 = 0
     option4_start = 0
-    option4_end = 200
+    option4_end = 10
 
-    # Reflect USER options
-    if len(option2) == 1:
-        change_feature_matrix_label(option1[0], option2[0], option3)
-    else:
-        print("not yet")
-    change_gene_range(option4_start, option4_end)
-
-    data_collect()
-
+    agg = data_collect(option1, option2, option3, option4_start, option4_end)
+    print(agg)

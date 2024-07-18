@@ -3,6 +3,8 @@ from tkinter import filedialog, messagebox
 from tkinter import ttk
 
 import rna_seq_data_collect as rsd
+import merfish as mer
+
 
 class Collector:
     def __init__(self, root):
@@ -104,21 +106,33 @@ class Collector:
         
         # import function from rsd
         try:
-            print(path)
-            print(selected_option1)
-            print(selected_option2)
-            print(selected_option3)
-            print(start)
-            print(end)
-
             rsd.change_address(path)
+            mer.change_address(path)
+
+            result_window = tk.Toplevel(self.root)
+            result_window.title("Data Collection Results")
+             
+            text_widget = tk.Text(result_window, wrap=tk.WORD)
+            text_widget.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
+
+            option_summary = ("========= USER OPTION =========\n" +
+                              "USER path:\t" + f"{path}\n" +
+                              "USER directories:\t" + f"{selected_option1}\n" +
+                              "USER files:\t" + f"{selected_option2}\n" +
+                              "USER data type option:\t" + f"{'raw' if selected_option3 else 'log2'}\n" +
+                              "Gene range:\t" + f"({start}-{end})\n" +
+                              "\n")
+            text_widget.insert(tk.END, option_summary)
+
             # Reflect USER options
-            if len(selected_option2) == 1:
-                rsd.change_feature_matrix_label(selected_option1[0], selected_option2[0], selected_option3)
-            else:
-                print("not yet")
-            rsd.change_gene_range(start, end)
-            rsd.data_collect()
+            agg = rsd.data_collect(selected_option1, selected_option2, selected_option3, start, end)
+            cell_number = rsd.get_cell_number()
+
+            result_summary = ("========= RESULT SUMMARY =========\n" +
+                              "TOTAL cells:\t" + f"{cell_number}\n")
+            text_widget.insert(tk.END, result_summary)
+            text_widget.insert(tk.END, f"{agg}\n")
+
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -134,7 +148,7 @@ class Tester:
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("FOS seq")
-    root.geometry("640x480")
+    root.geometry("1280x960")
 
     collector_app = Collector(root)
     tester_app = Tester(root)
