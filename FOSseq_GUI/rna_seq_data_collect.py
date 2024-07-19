@@ -73,7 +73,7 @@ def get_cell_number():
 
 
 # ======== Main job =========
-def _do_data_collect():
+def _do_data_collect(pc=None):
     download_base = Path(address)
     abc_cache = AbcProjectCache.from_s3_cache(download_base)
 
@@ -103,6 +103,8 @@ def _do_data_collect():
     _update_cell_number(0)
     _update_cell_number(len(adata.obs))
 
+    pc(-1, 1)   # Done cell metadata generating
+    
     def _create_expression_dataframe(ad, gf, cf):
         gdata = ad[:, gf.index].to_df()
         gdata.columns = gf.gene_symbol
@@ -135,12 +137,15 @@ def _do_data_collect():
             final_agg = agg
         else:
             final_agg = final_agg.merge(agg, on='cluster_alias', how='outer')
+        
+        if pc:
+            pc(j, gene_end)
     
     return final_agg
 
 
 # ======== Main job (multi.ver) =========
-def _do_data_collect_multi(o1, o2, o3):
+def _do_data_collect_multi(o1, o2, o3, pc=None):
     download_base = Path(address)
     abc_cache = AbcProjectCache.from_s3_cache(download_base)
 
@@ -177,6 +182,7 @@ def _do_data_collect_multi(o1, o2, o3):
                 _update_cell_number(len(adata.obs), 1)
 
     cell_filtered = cell_extended[pred] # filtered cell metadata
+    pc(-1, 1)   # Done cell metadata generating
 
     def _create_expression_dataframe(ad, gf, cf):
         gdata = ad[:, gf.index].to_df()
@@ -216,19 +222,25 @@ def _do_data_collect_multi(o1, o2, o3):
             final_agg = agg
         else:
             final_agg = final_agg.merge(agg, on='cluster_alias', how='outer')
+
+        if pc:
+            pc(j, gene_end)
+
     return final_agg
 
 
 # Excute _do_data_collect or _do_data_collect_multi
-def data_collect(o1, o2, o3, o4s, o4e):
+def data_collect(o1, o2, o3, o4s, o4e, pc = None):
+    pc(-1, 0)
     _change_gene_range(o4s, o4e)
 
     if len(o2) == 1:
         _change_feature_matrix_label(o1[0], o2[0], o3)
-        agg = _do_data_collect()
+        agg = _do_data_collect(pc=pc)
     else:
-        agg = _do_data_collect_multi(o1, o2, o3)
+        agg = _do_data_collect_multi(o1, o2, o3, pc=pc)
     return agg
+
 
 if __name__ == '__main__':
     # main job

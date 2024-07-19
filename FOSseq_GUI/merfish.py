@@ -25,17 +25,21 @@ def change_address(s):
     global address
     address = s
 
+
 def change_json_path(s):
     global json_path
     json_path = s
+
 
 def change_struct_name(s):
     global struct_name
     struct_name = s
 
+
 def change_d(n):
     global d
     d = n
+
 
 def generate_all_cell_matrix():
     download_base = Path(address)
@@ -75,6 +79,7 @@ def generate_all_cell_matrix():
     global cell_matrix
     cell_matrix = cell_joined
 
+
 def generate_filtered_cell_matrix():
     pred = (cell_matrix['parcellation_substructure'] == struct_name)
 
@@ -83,6 +88,7 @@ def generate_filtered_cell_matrix():
     filtered_matrix = cell_matrix[pred].copy()
 
     print(len(filtered_matrix))
+
 
 def _read_user_coords():
     with open(json_path, 'r') as file:
@@ -105,12 +111,14 @@ def _read_user_coords():
     coords = pd.DataFrame(points, columns=['x', 'y', 'z', 'name'])
     return coords
 
+
 def _is_cell_near(cx, cy, cz, xx, yy, zz):
     dis = ((cx - xx)**2 + (cy - yy)**2 + (cz - zz)**2)**0.5
     if dis <= d:
         return True
     else:
         return False
+
 
 # ======== Main job =========
 def _cfos_grouping():
