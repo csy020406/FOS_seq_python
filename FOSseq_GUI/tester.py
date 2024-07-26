@@ -152,6 +152,11 @@ class Tester:
 
     # Called by Sorter
     def update_cfos_data(self, cfos_o, cfos_x):
+        if cfos_o is None or cfos_x is None:
+            self.ready_cfos = 0
+            self.check_ready()
+            return
+        
         self.cfos_o = cfos_o
         self.cfos_x = cfos_x
 
@@ -181,6 +186,8 @@ class Tester:
         self.progress_window.geometry("500x150")
         self.progress_window.resizable(False, False)
 
+        self.progress_window.protocol("WM_DELETE_WINDOW", self.on_close_attempt)
+
         self.progress_window.columnconfigure(0, weight=1)
         self.progress_window.columnconfigure(1, weight=1)
         self.progress_window.rowconfigure(1,weight=1)
@@ -196,14 +203,18 @@ class Tester:
         self.progress_bar = ttk.Progressbar(self.progress_window, variable=self.progress_var, maximum=100)
         self.progress_bar.grid(row=1, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="ew")
 
-        self.cancel_button = ttk.Button(self.progress_window, text="Cancel", command=self.cancel_task)
-        self.cancel_button.grid(row=2, column=1, padx=10, pady=10, sticky="se")
+        # self.cancel_button = ttk.Button(self.progress_window, text="Cancel", command=self.cancel_task)
+        # self.cancel_button.grid(row=2, column=1, padx=10, pady=10, sticky="se")
 
-        self.cancel_button = ttk.Button(self.progress_window, text="Cancel", command=self.cancel_task)
-        self.cancel_button.grid(row=2, column=1, padx=10, pady=10, sticky="se")
+        # self.cancel_button = ttk.Button(self.progress_window, text="Cancel", command=self.cancel_task)
+        # self.cancel_button.grid(row=2, column=1, padx=10, pady=10, sticky="se")
 
         # Check periodically if the task is done
         self.root.after(100, self.check_task_done)
+
+    def on_close_attempt(self):
+        # Optionally, you can show a message or simply ignore the close attempt
+        pass
 
     def check_task_done(self):
         if self.thread.is_alive():
@@ -216,14 +227,14 @@ class Tester:
             # Show completion message
             self.show_results()
 
-    def cancel_task(self):
-        # Signal the background task to cancel
-        self.queue.put("Cancel")
+    # def cancel_task(self):
+    #     # Signal the background task to cancel
+    #     self.queue.put("Cancel")
 
-        # Stop the progress bar and close the window
-        self.progress_bar.stop()
-        self.progress_window.destroy()
-        self.ttest_button.config(state=tk.NORMAL)
+    #     # Stop the progress bar and close the window
+    #     self.progress_bar.stop()
+    #     self.progress_window.destroy()
+    #     self.ttest_button.config(state=tk.NORMAL)
 
     # 'current' represents the current gene
     # 'total' represents total genes
@@ -250,7 +261,7 @@ class Tester:
         fold_changes = self.ttest_result['fold_change']
         p_values = self.ttest_result['p_value']
 
-        neg_log_p_values = p_values
+        neg_log_p_values = self.neg_log_p_val(p_values)
 
         self.ax.scatter(fold_changes, neg_log_p_values, alpha=0.75)
         
@@ -266,3 +277,15 @@ class Tester:
         self.ax.axvline(x=-1, color='r', linestyle='--')
 
         self.canvas.draw()
+
+    def neg_log_p_val(self, p_values) :
+        neg_log_p_values = []
+        for i in range(len(p_values)):
+            if p_values[i] == 0 :
+                neg_log_p_values.append(0)
+                continue
+            else:
+                neg_log = -np.log10(p_values[i])
+                neg_log_p_values.append(neg_log)
+            
+        return neg_log_p_values

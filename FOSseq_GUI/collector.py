@@ -83,6 +83,8 @@ class Collector:
         self.progress_window.geometry("500x150")
         self.progress_window.resizable(False, False)
 
+        self.progress_window.protocol("WM_DELETE_WINDOW", self.on_close_attempt)
+
         self.progress_window.columnconfigure(0, weight=1)
         self.progress_window.columnconfigure(1, weight=1)
         self.progress_window.rowconfigure(1,weight=1)
@@ -98,11 +100,15 @@ class Collector:
         self.progress_bar = ttk.Progressbar(self.progress_window, variable=self.progress_var, maximum=100)
         self.progress_bar.grid(row=1, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="ew")
 
-        self.cancel_button = ttk.Button(self.progress_window, text="Cancel", command=self.cancel_task)
-        self.cancel_button.grid(row=2, column=1, padx=10, pady=10, sticky="se")
+        # self.cancel_button = ttk.Button(self.progress_window, text="Cancel", command=self.cancel_task)
+        # self.cancel_button.grid(row=2, column=1, padx=10, pady=10, sticky="se")
 
         # Check periodically if the task is done
         self.root.after(100, self.check_task_done)
+
+    def on_close_attempt(self):
+        # Optionally, you can show a message or simply ignore the close attempt
+        pass
 
     def check_task_done(self):
         if self.thread.is_alive():
@@ -114,12 +120,12 @@ class Collector:
 
             self.show_results()
 
-    def cancel_task(self):
-        self.queue.put("Cancel")
+    # def cancel_task(self):
+    #     self.queue.put("Cancel")
 
-        self.progress_bar.stop()
-        self.progress_window.destroy()
-        self.exe_button.config(state=tk.NORMAL)
+    #     self.progress_bar.stop()
+    #     self.progress_window.destroy()
+    #     self.exe_button.config(state=tk.NORMAL)
 
     # 'current' represents the current task or current gene
     # 'total' represents whether current task done or total genes

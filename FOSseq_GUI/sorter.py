@@ -4,6 +4,7 @@ from tkinter import filedialog, messagebox
 import threading
 import queue
 import pandas as pd
+import os
 
 from tester import Tester
 
@@ -12,7 +13,7 @@ from region_tree import region_tree
 
 
 class Sorter:
-    def __init__(self, root, option_frame, cfos_frame, cfos_text_widget, tester):
+    def __init__(self, root=None, option_frame=None, cfos_frame=None, cfos_text_widget=None, tester=None):
         self.root = root
         self.option_frame = option_frame
         self.cfos_frame = cfos_frame
@@ -22,6 +23,15 @@ class Sorter:
 
         self.label = tk.Label(self.option_frame, text="t-test")
         self.label.pack(padx=10, pady=10)
+
+        self.cfos_button_frame = tk.Frame(self.cfos_frame, bd=0)
+        self.cfos_button_frame.pack(padx=10, pady=(0, 10))
+
+        self.load_button = ttk.Button(self.cfos_button_frame, text="Load", command=self.load_file)
+        self.load_button.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.save_button = ttk.Button(self.cfos_button_frame, text="Save", command=self.save_file)
+        self.save_button.pack(side=tk.RIGHT, padx=(5, 0))
 
         # USER ABC File Path
         self.file_abc_path = None
@@ -109,48 +119,13 @@ class Sorter:
 
 
     # ====== PROCESS MANAGE ======
-    def show_warning_window(self, file_name, file_size):
-        self.dialog = tk.Toplevel(self, root)
-        self.dialog.title("Warning")
-
-        self.dialog.geometry("500x200")
-
-        message = (
-            f"The required sizes of each ABC atlas metadata file '{file_name}' is {file_size} GB.\n\n"
-            "YOU CANNOT INTERRUPT THIS PROCESS ONCE STARTED, so\n"
-            "it is reccommended to DOUBLE-CHECK the ABC download path. If you have not previously\n"
-            "downloaded this file to the same path, the download will begin and may take a long time."
-        )
-        self.warning_label = tk.Label(self.dialog, text=message, padx=10, pady=10, wraplength=480)
-        self.warning_label.pack()
-
-        self.button_frame = tk.Frame(self.dialog)
-        self.button_frame.pack(pady=10)
-
-        self.cancel_button = tk.Button(self.button_frame, text="Cancel", command=self.on_cancel, bg="lightblue")
-        self.cancel_button.pack(side=tk.LEFT, padx=5)
-        self.continue_button = tk.Button(self.button_frame, text="Continue", command=self.on_continue)
-        self.continue_button.pack(side=tk.LEFT, padx=5)
-
-        self.result = None
-
-        self.root.wait_window(self.dialog)
-        
-        return self.result
-    
-    def on_cancel(self):
-        self.result = 1
-        self.dialog.destroy()
-
-    def on_continue(self):
-        self.result = 0
-        self.dialog.destroy()
-    
     def show_progress_window(self):
         self.progress_window = tk.Toplevel(self.root)
         self.progress_window.title("Processing")
         self.progress_window.geometry("500x150")
         self.progress_window.resizable(False, False)
+
+        self.progress_window.protocol("WM_DELETE_WINDOW", self.on_close_attempt)
 
         self.progress_window.columnconfigure(0, weight=1)
         self.progress_window.columnconfigure(1, weight=1)
@@ -167,11 +142,15 @@ class Sorter:
         self.progress_bar = ttk.Progressbar(self.progress_window, variable=self.progress_var, maximum=100)
         self.progress_bar.grid(row=1, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="ew")
 
-        self.cancel_button = ttk.Button(self.progress_window, text="Cancel", command=self.cancel_task)
-        self.cancel_button.grid(row=2, column=1, padx=10, pady=10, sticky="se")
+        # self.cancel_button = ttk.Button(self.progress_window, text="Cancel", command=self.cancel_task)
+        # self.cancel_button.grid(row=2, column=1, padx=10, pady=10, sticky="se")
 
         # Check periodically if the task is done
         self.root.after(100, self.check_task_done)
+
+    def on_close_attempt(self):
+        # Optionally, you can show a message or simply ignore the close attempt
+        pass
 
     def check_task_done(self):
         if self.thread.is_alive():
@@ -183,12 +162,12 @@ class Sorter:
 
             self.show_cfos_results()
 
-    def cancel_task(self):
-        self.queue.put("Cancel")
+    # def cancel_task(self):
+    #     self.queue.put("Cancel")
 
-        self.progress_bar.stop()
-        self.progress_window.destroy()
-        self.cfos_button.config(state=tk.NORMAL)
+    #     self.progress_bar.stop()
+    #     self.progress_window.destroy()
+    #     self.cfos_button.config(state=tk.NORMAL)
                 
 
     # 'current' represents the current task
@@ -262,6 +241,7 @@ class Sorter:
         self.user_radius = radius
 
         self.cfos_button.config(state=tk.DISABLED)
+
         self.show_progress_window()
 
         self.queue = queue.Queue()
@@ -296,50 +276,141 @@ class Sorter:
         if hasattr(self, 'cfos_o') and hasattr(self, 'cfos_x'):
             result_summary = ("========= RESULT SUMMARY =========\n" +
                               "TOTAL cells:\t" + f"{cell_number}\n" +
-                              "cFOS (+) cells:\t" + f"{len(self.cfos_o)}\n" +
-                              "cFOS (-) cells:\t" + f"{len(self.cfos_x)}\n" +
+                              "cFOS (+) cells:\t" + f"{self.cfos_o['n'].sum()}\n" +
+                              "cFOS (-) cells:\t" + f"{self.cfos_x['n'].sum()}\n" +
                               "\n")
-            # self.summary = option_summary + "TOTAL cells:\t" + f"{cell_number}\n"
+            self.summary = option_summary + result_summary
             self.cfos_text_widget.insert(tk.END, result_summary)
-            self.cfos_text_widget.insert(tk.END, f"[cFOS (+) groups]\n{self.cfos_o['n'].sum}\n")
+            self.cfos_text_widget.insert(tk.END, f"[cFOS (+) groups]\n{self.cfos_o}\n")
             self.cfos_text_widget.insert(tk.END, "\n")
-            self.cfos_text_widget.insert(tk.END, f"[cFOS (-) groups]\n{self.cfos_x['n'].sum}\n")
+            self.cfos_text_widget.insert(tk.END, f"[cFOS (-) groups]\n{self.cfos_x}\n")
 
             self.tester.update_cfos_data(self.cfos_o, self.cfos_x)
         else:
             self.cfos_text_widget.insert(tk.END, "cFOS grouping was cancelled or failed.")
+
+    def update_display(self):
+        pd.set_option('display.multi_sparse', True)
+
+        self.cfos_text_widget.delete(1.0, tk.END)
+        if self.summary is not None:
+            self.cfos_text_widget.insert(tk.END, f"{self.summary}\n")
+        else:
+            self.cfos_text_widget.insert(tk.END, "There is no loaded summary data.\n")
+
+        if self.cfos_o is not None and self.cfos_x is not None:
+            self.cfos_text_widget.insert(tk.END, f"[cFOS (+) groups]\n{self.cfos_o}\n")
+            self.cfos_text_widget.insert(tk.END, "\n")
+            self.cfos_text_widget.insert(tk.END, f"[cFOS (-) groups]\n{self.cfos_x}\n")
+        else:
+            self.cfos_text_widget.insert(tk.END, "There is no loaded cfos data.\n")
+
+    def load_file(self):
+        file_path = filedialog.askopenfilename(
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        print(file_path)
+        if file_path:
+            try:
+                if "_cfos_o.csv" in file_path:
+                    cfos_o_path = file_path
+                    cfos_x_path = file_path.replace("_cfos_o", "_cfos_x")
+                elif "_cfos_x.csv" in file_path:
+                    cfos_x_path = file_path
+                    cfos_o_path = file_path.replace("_cfos_x", "_cfos_o")
+                else:
+                    messagebox.showerror("Error", "Please check filename format.")
+                    return
+
+                self.cfos_o = pd.read_csv(cfos_o_path, index_col=0)
+                self.cfos_x = pd.read_csv(cfos_x_path, index_col=0)
+
+                # Check if proper data format
+                if self.cfos_o.columns.get_level_values(0) != ['n'] or self.cfos_x.columns.get_level_values(0) != ['n']:
+                    messagebox.showerror("Error", "Please check data format.")
+                    return
+                elif not self.cfos_o.index.to_series().apply(lambda x: isinstance(x, int)).all():
+                    messagebox.showerror("Error", "Please check data format.")
+                    return
+                elif not self.cfos_x.index.to_series().apply(lambda x: isinstance(x, int)).all():
+                    messagebox.showerror("Error", "Please check data format.")
+                    return
+
+                # Check txt file
+                txt_file_path = cfos_o_path.replace("_cfos_o.csv", ".txt")
+                if os.path.exists(txt_file_path):
+                    with open(txt_file_path, 'r') as txt_file:
+                        self.summary = txt_file.read()
+                else:
+                    self.summary = None
+
+                self.update_display()
+                self.tester.update_cfos_data(self.cfos_o, self.cfos_x)
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load file:\n{e}")
+
+    def save_file(self):
+        if self.cfos_o is None or self.cfos_x is None:
+            messagebox.showwarning("Save", "Data is not ready yet!")
+            return
+
+        self.cfos_o.reset_index(inplace=True)
+        self.cfos_x.reset_index(inplace=True)
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        if file_path:
+            try:
+                cfos_o_path = os.path.splitext(file_path)[0] + "_cfos_o" + ".csv"
+                cfos_x_path = os.path.splitext(file_path)[0] + "_cfos_x" + ".csv"
+
+                self.cfos_o.to_csv(cfos_o_path, index=False)
+                self.cfos_x.to_csv(cfos_x_path, index=False)
+
+                if self.summary:
+                    txt_file_path = os.path.splitext(file_path)[0] + ".txt"
+                    with open(txt_file_path, 'w') as txt_file:
+                        txt_file.write(self.summary)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save file:\n{e}")
    
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("FOS seq")
-    root.geometry("900x600")
+    # root = tk.Tk()
+    # root.title("FOS seq")
+    # root.geometry("900x600")
 
-    # Frames
-    root.rowconfigure(0, weight=1)
-    root.rowconfigure(1, weight=1)
-    root.columnconfigure(0, weight=0)
-    root.columnconfigure(1, weight=1)
-    root.columnconfigure(2, weight=1)
+    # # Frames
+    # root.rowconfigure(0, weight=1)
+    # root.rowconfigure(1, weight=1)
+    # root.columnconfigure(0, weight=0)
+    # root.columnconfigure(1, weight=1)
+    # root.columnconfigure(2, weight=1)
 
-    collector_frame = tk.Frame(root, borderwidth=1, relief="solid", width=500)
-    collector_frame.grid(row=0, column=0, rowspan=2, padx=10, pady=10, sticky='news')
-    collector_frame.grid_propagate(False)
+    # collector_frame = tk.Frame(root, borderwidth=1, relief="solid", width=500)
+    # collector_frame.grid(row=0, column=0, rowspan=2, padx=10, pady=10, sticky='news')
+    # collector_frame.grid_propagate(False)
 
-    tester_frame = tk.Frame(root, borderwidth=1, relief="solid")
-    tester_frame.grid(row=0, column=1, padx=10, pady=10, sticky='news')
+    # tester_frame = tk.Frame(root, borderwidth=1, relief="solid")
+    # tester_frame.grid(row=0, column=1, padx=10, pady=10, sticky='news')
 
-    sorter_option_frame = tk.Frame(root, borderwidth=1, relief="solid")
-    sorter_option_frame.grid(row=1, column=1, padx=10, pady=10, sticky='news')
+    # sorter_option_frame = tk.Frame(root, borderwidth=1, relief="solid")
+    # sorter_option_frame.grid(row=1, column=1, padx=10, pady=10, sticky='news')
 
-    sorter_result_frame = tk.Frame(root, borderwidth=1, relief="solid")
-    sorter_result_frame.grid(row=0, column=2, rowspan=2, padx=10, pady=10, sticky='news')
+    # sorter_result_frame = tk.Frame(root, borderwidth=1, relief="solid")
+    # sorter_result_frame.grid(row=0, column=2, rowspan=2, padx=10, pady=10, sticky='news')
 
-    # Text widget
-    collection_text_widget = tk.Text(tester_frame, wrap=tk.WORD)
-    collection_text_widget.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
+    # # Text widget
+    # collection_text_widget = tk.Text(tester_frame, wrap=tk.WORD)
+    # collection_text_widget.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
 
     # Classes
-    sorter_app = Sorter(root, sorter_option_frame, sorter_result_frame)
+    # sorter_app = Sorter(root, sorter_option_frame, sorter_result_frame)
     
-    root.mainloop()
+    # root.mainloop()
+
+    sorter_app = Sorter()
+    sorter_app.load_file()
