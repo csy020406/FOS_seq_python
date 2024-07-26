@@ -1,39 +1,30 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
 from tkinter import ttk
+from tkinter import filedialog, messagebox
 import threading
 import queue
+import pandas as pd
 
-from editor import Editor
+from tester import Tester
 
 import rna_seq_data_collect as rsd
-import merfish as mer
+
 
 class Collector:
-    def __init__(self, root, frame, result_frame, editor):
+    def __init__(self, root, frame, result_frame, result_text_widget, tester):
         self.root = root
-        self.editor = editor
+        self.tester = tester
         
         self.frame = frame
         self.label = ttk.Label(self.frame, text="10X RNA seq Data Collection")
         self.label.pack(padx=10, pady=10)
 
         self.result_frame = result_frame
-        self.result_label = ttk.Label(self.result_frame, text="Data Collection Results")
-        self.result_label.pack(padx=10, pady=10)
 
-        self.text_widget = tk.Text(self.result_frame, wrap=tk.WORD)
-        self.text_widget.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
-
-        self.update_button = ttk.Button(self.result_frame, text="Update", command=lambda: self.editor.update_agg(self.agg, self.summary))
-        self.update_button.pack(pady=10)
-        self.update_button.config(state=tk.DISABLED)
+        self.text_widget = result_text_widget
 
         # User File Path
-        self.file_path = tk.StringVar()
-        tk.Button(self.frame, text="Select Download Path", command=self.browse_folder).pack(pady=10)
-        self.path_label = tk.Label(self.frame, textvariable=self.file_path)
-        self.path_label.pack(pady=10)
+        self.file_path = None
 
         # OPTION 1: 10Xv2, 10Xv3, 10XMulti
         self.option1_vars = [tk.IntVar() for _ in range(3)]
@@ -69,10 +60,8 @@ class Collector:
         self.exe_button = ttk.Button(self.frame, text="Excute Data Collecting", command=self.start_data_collect)
         self.exe_button.pack(pady=10)
 
-    def browse_folder(self):
-        folder_selected = filedialog.askdirectory()
-        if folder_selected:
-            self.file_path.set(folder_selected)
+    def set_abc_path(self, new_path):
+        self.file_path = new_path
 
     def show_datafiles(self):
         # Get option 1
@@ -87,6 +76,7 @@ class Collector:
         for file_name in datafiles:
             self.option2_listbox.insert(tk.END, file_name)
 
+    # ====== PROCESS MANAGE ======
     def show_progress_window(self):
         self.progress_window = tk.Toplevel(self.root)
         self.progress_window.title("Processing")
@@ -101,7 +91,7 @@ class Collector:
                                        font=("Arial", 10),
                                        anchor="w",
                                        justify="left")
-        self.progress_label.grid(row=0, column=0, columnspan=2, padx=20, pady=(10,0), sticky="w")
+        self.progress_label.grid(row=0, column=0, columnspan=2, padx=10, pady=(10,0), sticky="w")
 
         self.progress_var = tk.DoubleVar()
 
@@ -121,7 +111,6 @@ class Collector:
             self.progress_bar.stop()
             self.progress_window.destroy()
             self.exe_button.config(state=tk.NORMAL)
-            self.update_button.config(state=tk.NORMAL)
 
             self.show_results()
 
@@ -132,11 +121,39 @@ class Collector:
         self.progress_window.destroy()
         self.exe_button.config(state=tk.NORMAL)
 
+    # 'current' represents the current task or current gene
+    # 'total' represents whether current task done or total genes
+    def update_progress(self, current, total):
+        if current == -1:
+            if total == 0:
+                self.progress_label.config(text="10X RNA seq Data Collection Excuted.\nGenerating Cell Metadata ...")
+                self._gradual_update_progress(self.progress_var.get(), 100 - (self.end - self.start) / 20)
+            else:
+                self.progress_label.config(text="10X RNA seq Data Collection Excuted.\nAggregating Gene Expression data ...")
+        else:
+            self.progress_label.config(text="10X RNA seq Data Collection Excuted.\nAggregating Gene Expression data ...")
+            self._gradual_update_progress(self.progress_var.get(), 100 - (current/total - 1)*(self.end - self.start)/20)
+        
+
+    def _gradual_update_progress(self, from_value, to_value, rate=150):
+        step = 1    # Increment step for gradual update
+        if from_value < to_value:
+            new_value = min(from_value + step, to_value)
+            self.progress_var.set(new_value)
+            self.progress_window.update_idletasks()     # Update GUI
+            # Schedule next update
+            self.progress_window.after(rate, self._gradual_update_progress, new_value, to_value)
+        else:
+            self.progress_var.set(to_value)
+
+
+    # ====== MAIN JOB ======
+    # Examine USER options
     # Excute data_collect
     def start_data_collect(self):
         # ==== Reflect USER OPTIONs ====
         # User File Path
-        path = self.file_path.get()
+        path = self.file_path
         if not path:
             messagebox.showerror("Error", "Please select a download path.")
             return
@@ -175,7 +192,6 @@ class Collector:
         self.end = end
 
         self.exe_button.config(state=tk.DISABLED)
-        self.update_button.config(state=tk.DISABLED)
         self.show_progress_window()
 
         self.queue = queue.Queue()
@@ -183,30 +199,13 @@ class Collector:
         self.thread = threading.Thread(target=self.data_collect)
         self.thread.start()
 
-
     # Excute rsd.data_collect
     def data_collect(self):
-        # current represents current task or current gene
-        # total represents whethere current task done or total genes
-        def update_progress(current, total):
-            if current == -1:
-                if total == 0:
-                    self.progress_label.config(text="10X RNA seq Data Collection Excuted.\nGenerating Cell Metadata ...")
-                else:
-                    self.progress_var.set(10)
-                    self.progress_window.update_idletasks()     # Update GUI
-            else:
-                self.progress_label.config(text="10X RNA seq Data Collection Excuted.\nAggregating Gene Expression data ...")
-                progress = 10 + (current / total) * 90
-                self.progress_var.set(progress)
-                self.progress_window.update_idletasks()     # Update GUI
-
         try:
             rsd.change_address(self.path)
-            mer.change_address(self.path)
 
             # Reflect USER options
-            self.agg = rsd.data_collect(self.user_option1, self.user_option2, self.user_option3, self.start, self.end, pc=update_progress)
+            self.agg = rsd.data_collect(self.user_option1, self.user_option2, self.user_option3, self.start, self.end, pc=self.update_progress)
 
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -214,6 +213,8 @@ class Collector:
             self.queue.put("Task Done")
 
     def show_results(self):
+        pd.set_option('display.multi_sparse', True)
+
         self.text_widget.delete("1.0", "end")
 
         option_summary = ("========== USER OPTION ==========\n" +
@@ -233,6 +234,8 @@ class Collector:
             self.summary = option_summary + "TOTAL cells:\t" + f"{cell_number}\n"
             self.text_widget.insert(tk.END, result_summary)
             self.text_widget.insert(tk.END, f"{self.agg}\n")
+
+            self.tester.update_agg(self.agg, self.summary)  # Send data to tester
         else:
             self.text_widget.insert(tk.END, "Data collection was cancelled or failed.")
     

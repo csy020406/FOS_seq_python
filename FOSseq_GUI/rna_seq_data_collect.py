@@ -103,7 +103,7 @@ def _do_data_collect(pc=None):
     _update_cell_number(0)
     _update_cell_number(len(adata.obs))
 
-    pc(-1, 1)   # Done cell metadata generating
+    if pc: pc(-1, 1)   # Done cell metadata generating
     
     def _create_expression_dataframe(ad, gf, cf):
         gdata = ad[:, gf.index].to_df()
@@ -138,8 +138,7 @@ def _do_data_collect(pc=None):
         else:
             final_agg = final_agg.merge(agg, on='cluster_alias', how='outer')
         
-        if pc:
-            pc(j, gene_end)
+        if pc: pc(j, gene_end)
     
     return final_agg
 
@@ -182,7 +181,7 @@ def _do_data_collect_multi(o1, o2, o3, pc=None):
                 _update_cell_number(len(adata.obs), 1)
 
     cell_filtered = cell_extended[pred] # filtered cell metadata
-    pc(-1, 1)   # Done cell metadata generating
+    if pc: pc(-1, 1)   # Done cell metadata generating
 
     def _create_expression_dataframe(ad, gf, cf):
         gdata = ad[:, gf.index].to_df()
@@ -223,15 +222,14 @@ def _do_data_collect_multi(o1, o2, o3, pc=None):
         else:
             final_agg = final_agg.merge(agg, on='cluster_alias', how='outer')
 
-        if pc:
-            pc(j, gene_end)
+        if pc: pc(j, gene_end)
 
     return final_agg
 
 
 # Excute _do_data_collect or _do_data_collect_multi
-def data_collect(o1, o2, o3, o4s, o4e, pc = None):
-    pc(-1, 0)
+def data_collect(o1, o2, o3, o4s, o4e, pc=None):
+    if pc: pc(-1, 0)
     _change_gene_range(o4s, o4e)
 
     if len(o2) == 1:
