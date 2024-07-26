@@ -1,0 +1,8 @@
+========== USER OPTION ==========
+USER path:	C:/programming_data/abc_download_root
+USER directories:	['WMB-10Xv2']
+USER files:	['WMB-10Xv2-TH']
+USER data type option:	log2
+Gene range:	(0-1000)
+
+TOTAL cells:	131212

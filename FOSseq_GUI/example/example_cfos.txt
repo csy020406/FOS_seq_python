@@ -1,0 +1,10 @@
+========== USER OPTION ==========
+USER path:	C:/programming_data/test_output_ABA/Coordinates/Test_resized_ABA_3D_combined.json
+USER selected region(s):	['LH']
+USER radius:	25.0
+
+========= RESULT SUMMARY =========
+TOTAL cells:	2592
+cFOS (+) cells:	62
+cFOS (-) cells:	2530
+
