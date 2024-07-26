@@ -27,6 +27,9 @@ Link: https://alleninstitute.github.io/abc_atlas_access/notebooks/10x_snRNASeq_t
 example 폴더 확인
 
 [사용법]
+모든 .py 파일 한 폴더 안에 다운받고 Visual code로 프로젝트 생성
+GUI.py에서 F5 눌러 실행
+
 (1) ABC atlas download root 설정
 - ABC atlas jupyter notebook에서 사용했던 파일경로
 
