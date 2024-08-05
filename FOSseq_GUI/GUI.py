@@ -29,7 +29,7 @@ def main():
     fixed_left_frame.grid_propagate(False)
 
     # ABC address setting region
-    abc_frame = tk.Frame(fixed_left_frame, borderwidth=1, relief="solid", height=200)
+    abc_frame = tk.Frame(fixed_left_frame, borderwidth=1, relief="solid", height=100)
     abc_frame.pack(fill=tk.X, padx=10, pady=10)
     abc_frame.pack_propagate(False)
 

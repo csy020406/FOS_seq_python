@@ -1,12 +1,13 @@
-import tkinter as tk
-from tkinter import ttk
-from tkinter import filedialog, messagebox
 import threading
 import queue
+
+import tkinter as tk
+from tkinter import ttk
+from tkinter import messagebox
+
 import pandas as pd
 
 from tester import Tester
-
 import rna_seq_data_collect as rsd
 
 
@@ -56,6 +57,13 @@ class Collector:
         tk.Entry(self.frame, textvariable=self.range_start).pack()
         tk.Entry(self.frame, textvariable=self.range_end).pack()
 
+        # OPTION 5: normality test
+        self.option5_var = tk.IntVar()
+        option5 = [("count", 0), ("Shapiro-Wilk test", 1)]
+        tk.Label(self.frame, text="Select Normality Test Type:").pack()
+        for option, val in option5:
+            tk.Radiobutton(self.frame, text=option, variable=self.option5_var, value=val).pack(anchor='w')
+
         # Excute button
         self.exe_button = ttk.Button(self.frame, text="Excute Data Collecting", command=self.start_data_collect)
         self.exe_button.pack(pady=10)
@@ -68,7 +76,6 @@ class Collector:
         user_option1 = [opt for var, opt in zip(self.option1_vars, ["WMB-10Xv2", "WMB-10Xv3", "WMB-10XMulti"]) if var.get() == 1]
         if not user_option1:
             return
-        
         datafiles = rsd.list_file_name(user_option1)
 
         # Update listbox
@@ -76,7 +83,10 @@ class Collector:
         for file_name in datafiles:
             self.option2_listbox.insert(tk.END, file_name)
 
-    # ====== PROCESS MANAGE ======
+
+    # =============================
+    # Process Manage Part
+    # =============================
     def show_progress_window(self):
         self.progress_window = tk.Toplevel(self.root)
         self.progress_window.title("Processing")
@@ -140,7 +150,6 @@ class Collector:
             self.progress_label.config(text="10X RNA seq Data Collection Excuted.\nAggregating Gene Expression data ...")
             self._gradual_update_progress(self.progress_var.get(), 100 - (current/total - 1)*(self.end - self.start)/20)
         
-
     def _gradual_update_progress(self, from_value, to_value, rate=150):
         step = 1    # Increment step for gradual update
         if from_value < to_value:
@@ -153,7 +162,9 @@ class Collector:
             self.progress_var.set(to_value)
 
 
-    # ====== MAIN JOB ======
+    # =============================
+    # Main Functions
+    # =============================
     # Examine USER options
     # Excute data_collect
     def start_data_collect(self):
@@ -188,6 +199,9 @@ class Collector:
         if not (0 <= start <= 32284 and 0 <= end <= 33000 and start <= end):
             messagebox.showerror("Error", "Please enter valid integers in the range 1-32285.")
             return
+        
+        # OPTION 5
+        user_option5 = self.option5_var.get()   # 0 for "count", 1 for "shapiro"
 
         # ==== All Options are ready ====
         self.path = path
@@ -196,6 +210,7 @@ class Collector:
         self.user_option3 = user_option3
         self.start = start
         self.end = end
+        self.user_option5 = user_option5
 
         self.exe_button.config(state=tk.DISABLED)
         self.show_progress_window()
@@ -209,12 +224,11 @@ class Collector:
     def data_collect(self):
         try:
             rsd.change_address(self.path)
-
             # Reflect USER options
-            self.agg = rsd.data_collect(self.user_option1, self.user_option2, self.user_option3, self.start, self.end, pc=self.update_progress)
-
+            self.agg = rsd.data_collect(self.user_option1, self.user_option2, self.user_option3, self.start, self.end, self.user_option5, pc=self.update_progress)
         except Exception as e:
             messagebox.showerror("Error", str(e))
+            self.queue.put("Error")
         finally:
             self.queue.put("Task Done")
 
